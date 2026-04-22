@@ -1,0 +1,13 @@
+{
+  "name": "Thư Ký Túi Áo AI",
+  "description": "Ứng dụng quản lý ghi chú và công việc được hỗ trợ bởi trí tuệ nhân tạo Gemini Nano, hoạt động cục bộ trên thiết bị của bạn để đảm bảo tốc độ và sự riêng tư tuyệt đối.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "AI-Powered Productivity",
+    "On-device Simulation",
+    "Smart Document OCR"
+  ]
+}
