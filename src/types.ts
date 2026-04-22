@@ -1,26 +1,14 @@
-export type ItemType = 'note' | 'event' | 'task';
-
-export interface TimelineItem {
-  id: string;
-  title: string;
-  content: string;
-  category: string;
-  timestamp: number;
-  type: ItemType;
-  priority?: 'low' | 'medium' | 'high';
-  isCompleted?: boolean;
+export interface GameState {
+  happinessPoints: number;
+  highestLevelReached: number;
+  gameOver: boolean;
 }
 
-export interface Note extends TimelineItem {
-  type: 'note';
-}
-
-export interface ScheduledEvent extends TimelineItem {
-  type: 'event';
-  duration?: number; // in minutes
-}
-
-export interface Task extends TimelineItem {
-  type: 'task';
-  dueDate?: number;
+export interface EvolutionLevel {
+  level: number;
+  name: string;
+  radius: number;
+  color: string;
+  icon: string;
+  points: number;
 }
