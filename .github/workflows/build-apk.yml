@@ -22,8 +22,11 @@ jobs:
       - name: Build Web App
         run: npm run build
         
-      - name: Capacitor Sync
+      - name: Capacitor Setup
         run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
           npx cap sync
           
       - name: Set up JDK 17
