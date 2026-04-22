@@ -1,16 +1,21 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import Matter from 'matter-js';
 import { EVOLUTION_LEVELS } from '../constants';
 import { GameState } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Heart, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Heart, RefreshCw, AlertTriangle, Hammer, Magnet } from 'lucide-react';
 
 import confetti from 'canvas-confetti';
 
-const GameCanvas: React.FC<{ 
+export interface GameCanvasHandle {
+  useHammer: () => boolean;
+  useMagnet: () => boolean;
+}
+
+const GameCanvas = forwardRef<GameCanvasHandle, { 
   onStateUpdate: (state: Partial<GameState>) => void;
   gameState: GameState;
-}> = ({ onStateUpdate, gameState }) => {
+}>(({ onStateUpdate, gameState }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
@@ -20,6 +25,7 @@ const GameCanvas: React.FC<{
   const [nextLevel, setNextLevel] = useState(1);
   const [dropping, setDropping] = useState(false);
   const [guidePosition, setGuidePosition] = useState(200);
+  const [isNearDeath, setIsNearDeath] = useState(false);
   
   // Game dimensions
   const GAME_WIDTH = 400;
@@ -29,48 +35,73 @@ const GameCanvas: React.FC<{
   stateRef.current = gameState;
 
   const [hearts, setHearts] = useState<{ id: number, x: number, y: number }[]>([]);
+  const [sparkles, setSparkles] = useState<{ id: number, x: number, y: number, tx: number, ty: number }[]>([]);
   const [flashes, setFlashes] = useState<{ id: number, x: number, y: number, radius: number }[]>([]);
   const [popups, setPopups] = useState<{ id: number, x: number, y: number, text: string, color: string }[]>([]);
   const [isShaking, setIsShaking] = useState(false);
+  const lastMergeTime = useRef<number>(0);
+  const comboTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  const triggerShake = (level: number) => {
-    if (level < 5) return;
+  const triggerShake = () => {
     setIsShaking(true);
     setTimeout(() => setIsShaking(false), 200);
   };
 
-  const spawnEffects = (x: number, y: number, radius: number, level: number) => {
-    // Spawn hearts
+  const getDifficultySettings = useCallback(() => {
+    switch (stateRef.current.difficulty) {
+      case 'easy': return { gravity: 0.0008, friction: 0.8, maxDropLevel: 2 };
+      case 'hard': return { gravity: 0.0012, friction: 0.3, maxDropLevel: 4 };
+      case 'extreme': return { gravity: 0.0015, friction: 0.1, maxDropLevel: 5 };
+      default: return { gravity: 0.001, friction: 0.5, maxDropLevel: 3 };
+    }
+  }, []);
+
+  const spawnEffects = (x: number, y: number, radius: number, level: number, combo: number = 0) => {
+    const timestamp = Date.now();
+
+    // 1. Trigger Screen Shake (200ms)
+    triggerShake();
+
+    // 2. Spawn 5 Small Hearts flying up
     const newHearts = Array.from({ length: 5 }).map((_, i) => ({
-      id: Date.now() + i,
-      x: x + (Math.random() - 0.5) * 40,
-      y: y + (Math.random() - 0.5) * 40
+      id: timestamp + i,
+      x: x + (Math.random() - 0.5) * 20,
+      y: y + (Math.random() - 0.5) * 20
     }));
-    setHearts(prev => [...prev.slice(-15), ...newHearts]);
+    setHearts(prev => [...prev.slice(-20), ...newHearts]);
 
-    // Spawn flash wave
-    const flashId = Date.now() + 100;
-    setFlashes(prev => [...prev, { id: flashId, x, y, radius: radius * 2 }]);
+    // 3. Twinkling Sparkles Effect (Subtle Fireworks)
+    const newSparkles = Array.from({ length: 8 }).map((_, i) => ({
+      id: timestamp + 20 + i,
+      x,
+      y,
+      tx: (Math.random() - 0.5) * 80,
+      ty: (Math.random() - 0.5) * 80
+    }));
+    setSparkles(prev => [...prev.slice(-30), ...newSparkles]);
 
-    // Spawn Merge Popup Text (Similar to video)
-    const popupId = Date.now() + 200;
-    const texts = ['Good', 'Great', 'Perfect', 'Amazing'];
-    const colors = ['#4ade80', '#fbbf24', '#f472b6', '#60a5fa'];
-    const levelIdx = Math.min(texts.length - 1, Math.floor(level / 4));
+    // 4. Merge Popup Text with Combo info
+    const texts = ['Good!', 'Great!', 'Perfect!', 'Amazing!', 'Magnificent!'];
+    const colors = ['#4ade80', '#fbbf24', '#f472b6', '#60a5fa', '#FFD700'];
+    const levelIdx = Math.min(texts.length - 1, Math.floor(level / 3));
     
+    const popupId = timestamp + 100;
+    const displayText = combo > 1 ? `${texts[levelIdx]} x${combo}` : texts[levelIdx];
+
     setPopups(prev => [...prev, { 
       id: popupId, 
-      x, 
-      y: y - 20, 
-      text: level > 10 ? 'Perfect' : texts[levelIdx],
+      x: x - 40,
+      y: y - 40, 
+      text: displayText,
       color: colors[levelIdx]
     }]);
 
+    // Clear effects
     setTimeout(() => {
       setHearts(prev => prev.filter(h => !newHearts.find(nh => nh.id === h.id)));
-      setFlashes(prev => prev.filter(f => f.id !== flashId));
+      setSparkles(prev => prev.filter(s => !newSparkles.find(ns => ns.id === s.id)));
       setPopups(prev => prev.filter(p => p.id !== popupId));
-    }, 1000);
+    }, 1200);
   };
 
   const initGame = useCallback(() => {
@@ -82,15 +113,6 @@ const GameCanvas: React.FC<{
       Matter.Render.stop(renderRef.current!);
       Matter.Runner.stop(runnerRef.current!);
     }
-
-    const getDifficultySettings = () => {
-      switch (gameState.difficulty) {
-        case 'easy': return { gravity: 0.0008, friction: 0.8, maxDropLevel: 2 };
-        case 'hard': return { gravity: 0.0012, friction: 0.3, maxDropLevel: 4 };
-        case 'extreme': return { gravity: 0.0015, friction: 0.1, maxDropLevel: 5 };
-        default: return { gravity: 0.001, friction: 0.5, maxDropLevel: 3 };
-      }
-    };
 
     const settings = getDifficultySettings();
 
@@ -153,19 +175,36 @@ const GameCanvas: React.FC<{
               Matter.World.remove(engine.world, [bodyA, bodyB]);
               Matter.World.add(engine.world, newBody);
               
-              // Trigger visual effects
-              spawnEffects(newX, newY, nextLevelData.radius, nextLevelData.level);
-              triggerShake(nextLevelData.level);
+              // Calculate Combo
+              const now = Date.now();
+              const isCombo = now - lastMergeTime.current < 1500;
+              const newComboCount = isCombo ? stateRef.current.comboCount + 1 : 1;
+              lastMergeTime.current = now;
               
+              if (comboTimeout.current) clearTimeout(comboTimeout.current);
+              comboTimeout.current = setTimeout(() => {
+                onStateUpdate({ comboCount: 0 });
+              }, 2000);
+
+              // Trigger visual effects
+              spawnEffects(newX, newY, nextLevelData.radius, nextLevelData.level, newComboCount);
+              
+              const pointsGained = nextLevelData.points * (1 + (newComboCount - 1) * 0.5);
+              const newPoints = stateRef.current.happinessPoints + Math.floor(pointsGained);
+              const newHighScore = Math.max(stateRef.current.highScore, newPoints);
+
               onStateUpdate({ 
-                happinessPoints: stateRef.current.happinessPoints + nextLevelData.points,
-                highestLevelReached: Math.max(stateRef.current.highestLevelReached, nextLevelData.level)
+                happinessPoints: newPoints,
+                highScore: newHighScore,
+                highestLevelReached: Math.max(stateRef.current.highestLevelReached, nextLevelData.level),
+                comboCount: newComboCount
               });
             }
           } else if (bodyA.level === 15) {
             // Level 15 + Level 15 = Only these two vanish!
             Matter.World.remove(engine.world, [bodyA, bodyB]);
-            triggerShake(15);
+            triggerShake();
+            spawnEffects(newX, newY, 80, 15);
             
             // Celebration fireworks at collision point
             confetti({
@@ -242,21 +281,24 @@ const GameCanvas: React.FC<{
       });
     });
 
-    // Check Game Over
+    // Check Game Over & Critical Warning
     const checkGameOver = setInterval(() => {
       if (stateRef.current.gameOver) return;
 
       const bodies = Matter.Composite.allBodies(engine.world);
+      let dangerFound = false;
       const isGameOver = bodies.some(body => {
         const b = body as any;
-        // Rules for Game Over:
-        // 1. Must be a circle (has level)
-        // 2. Must be above the death line
-        // 3. Must have been in the world for a while (to avoid immediate game over on drop)
-        // 4. Must be relatively stationary (velocity check)
+        if (!b.level || b.isStatic) return false;
+        
         const age = Date.now() - (b.createdAt || 0);
-        return !b.isStatic && b.level && body.position.y < deathLineY && age > 1500 && Math.abs(body.velocity.y) < 0.2;
+        const inDangerZone = body.position.y < deathLineY + 40;
+        if (inDangerZone && age > 1000) dangerFound = true;
+
+        return body.position.y < deathLineY && age > 1500 && Math.abs(body.velocity.y) < 0.2;
       });
+
+      setIsNearDeath(dangerFound);
 
       if (isGameOver) {
         onStateUpdate({ gameOver: true });
@@ -265,23 +307,67 @@ const GameCanvas: React.FC<{
     }, 500);
 
     return () => clearInterval(checkGameOver);
-  }, [onStateUpdate]);
+  }, [onStateUpdate, gameState.difficulty]);
 
   useEffect(() => {
     initGame();
   }, [initGame]);
 
+  useImperativeHandle(ref, () => ({
+    useHammer: () => {
+      if (!engineRef.current || gameState.gameOver) return false;
+      const bodies = Matter.Composite.allBodies(engineRef.current.world);
+      // Remove all bodies with level 1, 2, or 3
+      const toRemove = bodies.filter(b => (b as any).level && (b as any).level <= 3);
+      if (toRemove.length === 0) return false;
+      
+      toRemove.forEach(b => {
+        spawnEffects(b.position.x, b.position.y, 20, (b as any).level, 0);
+      });
+      Matter.World.remove(engineRef.current.world, toRemove);
+      triggerShake();
+      return true;
+    },
+    useMagnet: () => {
+      if (!engineRef.current || gameState.gameOver) return false;
+      const bodies = Matter.Composite.allBodies(engineRef.current.world);
+      const levelCounts: Record<number, Matter.Body[]> = {};
+      
+      bodies.forEach(b => {
+        const lvl = (b as any).level;
+        if (lvl) {
+          if (!levelCounts[lvl]) levelCounts[lvl] = [];
+          levelCounts[lvl].push(b);
+        }
+      });
+
+      // Find the level with most bodies to pull together
+      let bestLevel = -1;
+      let maxCount = 1;
+      Object.entries(levelCounts).forEach(([lvl, bs]) => {
+        if (bs.length > maxCount) {
+          maxCount = bs.length;
+          bestLevel = parseInt(lvl);
+        }
+      });
+
+      if (bestLevel === -1) return false;
+
+      const targets = levelCounts[bestLevel];
+      const centerX = targets.reduce((sum, b) => sum + b.position.x, 0) / targets.length;
+      
+      targets.forEach(b => {
+        const force = { x: (centerX - b.position.x) * 0.05, y: -0.02 };
+        Matter.Body.applyForce(b, b.position, force);
+      });
+
+      triggerShake();
+      return true;
+    }
+  }));
+
   const createCircle = (x: number, y: number, level: number) => {
     const levelData = EVOLUTION_LEVELS[level - 1];
-    const getDifficultySettings = () => {
-      switch (gameState.difficulty) {
-        case 'easy': return { gravity: 0.0008, friction: 0.8, maxDropLevel: 2 };
-        case 'hard': return { gravity: 0.0012, friction: 0.3, maxDropLevel: 4 };
-        case 'extreme': return { gravity: 0.0015, friction: 0.1, maxDropLevel: 5 };
-        default: return { gravity: 0.001, friction: 0.5, maxDropLevel: 3 };
-      }
-    };
-
     const settings = getDifficultySettings();
 
     const body = Matter.Bodies.circle(x, y, levelData.radius, {
@@ -326,15 +412,6 @@ const GameCanvas: React.FC<{
   const dropCurrent = () => {
     if (!engineRef.current) return;
     
-    const getDifficultySettings = () => {
-      switch (gameState.difficulty) {
-        case 'easy': return { gravity: 0.0008, friction: 0.8, maxDropLevel: 2 };
-        case 'hard': return { gravity: 0.0012, friction: 0.3, maxDropLevel: 4 };
-        case 'extreme': return { gravity: 0.0015, friction: 0.1, maxDropLevel: 5 };
-        default: return { gravity: 0.001, friction: 0.5, maxDropLevel: 3 };
-      }
-    };
-
     const settings = getDifficultySettings();
     
     setDropping(true);
@@ -352,7 +429,7 @@ const GameCanvas: React.FC<{
   return (
     <div 
       ref={containerRef} 
-      className={`relative w-full max-w-[400px] aspect-[2/3] mx-auto oriental-frame overflow-hidden touch-none transition-transform ${isShaking ? 'translate-y-1' : ''}`}
+      className={`relative w-full max-w-[400px] aspect-[2/3] mx-auto oriental-frame overflow-hidden touch-none transition-transform ${isShaking ? 'shake-active' : ''}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -398,14 +475,35 @@ const GameCanvas: React.FC<{
         {popups.map(popup => (
           <div 
             key={popup.id}
-            className="merge-popup text-xl sm:text-2xl italic tracking-tighter"
-            style={{ left: popup.x, top: popup.y, color: popup.color }}
+            className="merge-popup text-xl sm:text-2xl font-serif-royal italic"
+            style={{ 
+              left: popup.x, 
+              top: popup.y, 
+              color: popup.color,
+              filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.8))'
+            }}
           >
             {popup.text}
           </div>
         ))}
+
+        {sparkles.map(sparkle => (
+          <div 
+            key={sparkle.id}
+            className="sparkle-particle"
+            style={{ 
+              left: sparkle.x, 
+              top: sparkle.y, 
+              width: `${Math.random() * 4 + 2}px`,
+              height: `${Math.random() * 4 + 2}px`,
+              // @ts-ignore
+              '--tx': `${sparkle.tx}px`,
+              '--ty': `${sparkle.ty}px`
+            }}
+          />
+        ))}
       </div>
-      <div className="absolute top-[80px] left-0 right-0 h-px bg-red-400/30 dashed-line z-0" />
+      <div className={`absolute top-[80px] left-0 right-0 h-1 z-0 transition-colors duration-300 ${isNearDeath ? 'bg-red-500 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.8)]' : 'bg-red-400/30'}`} style={{ borderStyle: 'dashed', borderWidth: '1px 0 0 0' }} />
 
       {/* Guide & Next Item */}
       {!gameState.gameOver && (
@@ -415,8 +513,13 @@ const GameCanvas: React.FC<{
         >
           <div className="relative -translate-x-1/2 flex flex-col items-center">
              <div 
-              className="w-10 h-10 rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-bounce text-xl"
-              style={{ backgroundColor: nextLevelData.color }}
+              className="rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-bounce"
+              style={{ 
+                backgroundColor: nextLevelData.color,
+                width: `${nextLevelData.radius * 2}px`,
+                height: `${nextLevelData.radius * 2}px`,
+                fontSize: `${nextLevelData.radius}px`
+              }}
             >
               {nextLevelData.emoji}
             </div>
@@ -453,6 +556,6 @@ const GameCanvas: React.FC<{
       </AnimatePresence>
     </div>
   );
-};
+});
 
 export default GameCanvas;
