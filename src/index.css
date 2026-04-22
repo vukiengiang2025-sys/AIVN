@@ -1,34 +1,84 @@
-@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Playfair+Display:ital,wght@0,400;0,700;1,900&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Quicksand", ui-sans-serif, system-ui, sans-serif;
+  --font-serif-royal: "Cinzel", serif;
+  --font-serif-display: "Playfair Display", serif;
   
-  --color-warm-cream: #FFF9F2;
-  --color-warm-pink: #FFD6E0;
-  --color-warm-gold: #FFD27D;
-  --color-wood-brown: #8B5E3C;
+  --color-imperial-red: #8B0000;
+  --color-gold-bright: #D4AF37;
+  --color-palace-bg: #1A0F0A;
 }
 
 @layer base {
   body {
-    @apply bg-warm-cream text-stone-800 font-sans overflow-hidden antialiased;
+    @apply bg-[#110906] text-stone-100 font-sans antialiased;
+    background-image: url("https://www.transparenttextures.com/patterns/black-linen.png");
     touch-action: none;
-    -webkit-tap-highlight-color: transparent;
   }
 }
 
 @layer components {
-  .wood-frame {
-    @apply border-8 border-wood-brown rounded-2xl shadow-2xl bg-white/80;
+  .oriental-frame {
+    @apply border-[12px] border-[#2C1810] rounded-3xl relative overflow-hidden;
+    box-shadow: 
+      0 0 0 4px #D4AF37,
+      inset 0 0 60px rgba(0,0,0,0.9),
+      0 30px 60px rgba(0,0,0,0.8);
   }
-  
+
+  /* Decorative corners like in high-end mobile games */
+  .corner-ornament {
+    @apply absolute w-12 h-12 pointer-events-none z-40 opacity-80;
+    background-image: url("https://www.transparenttextures.com/patterns/gold-scale.png");
+    background-color: #D4AF37;
+    mask: radial-gradient(circle at top left, transparent 70%, black 72%);
+    -webkit-mask: radial-gradient(circle at top left, transparent 70%, black 72%);
+  }
+
+  .scroll-bg {
+    background: #fdf5e6;
+    background-image: url("https://www.transparenttextures.com/patterns/old-map.png");
+    box-shadow: inset 0 0 30px rgba(139,69,19,0.2);
+  }
+
   .glass-panel {
-    @apply bg-white/40 backdrop-blur-md border border-white/50 rounded-2xl p-4 shadow-sm;
+    @apply bg-black/60 backdrop-blur-xl border border-white/5 rounded-2xl p-4 shadow-2xl;
+  }
+
+  .merge-popup {
+    @apply font-serif-royal italic;
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+    animation: popupFade 1.2s cubic-bezier(0.17, 0.67, 0.83, 0.67) forwards;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.8));
+    letter-spacing: -2px;
+  }
+
+  @keyframes popupFade {
+    0% { transform: scale(0.3) translateY(30px); opacity: 0; }
+    30% { transform: scale(1.3) translateY(-10px); opacity: 1; }
+    100% { transform: scale(1) translateY(-80px); opacity: 0; }
   }
 }
 
-.happiness-glow {
-  filter: drop-shadow(0 0 8px rgba(255, 210, 125, 0.6));
+/* Hiệu ứng trái tim bay */
+@keyframes heartFly {
+  0% { transform: translateY(0) scale(0.5) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(-100px) scale(1.5) rotate(45deg); opacity: 0; }
+}
+
+.heart-particle {
+  position: absolute;
+  pointer-events: none;
+  animation: heartFly 1s ease-out forwards;
+}
+
+/* Nền họa tiết ấm cúng */
+.bg-warm-pattern {
+  background-color: #FFF9F2;
+  background-image: radial-gradient(#FFD6E0 0.5px, transparent 0.5px);
+  background-size: 20px 20px;
 }
 

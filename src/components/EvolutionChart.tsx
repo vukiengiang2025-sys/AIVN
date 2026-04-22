@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { EVOLUTION_LEVELS, ICON_MAP } from '../constants';
+import { EVOLUTION_LEVELS } from '../constants';
 import { Trophy } from 'lucide-react';
 
 interface EvolutionChartProps {
@@ -9,15 +9,15 @@ interface EvolutionChartProps {
 
 const EvolutionChart: React.FC<EvolutionChartProps> = ({ highestLevel }) => {
   return (
-    <div className="absolute left-4 top-24 bottom-4 w-16 md:w-48 hidden sm:flex flex-col gap-2 z-10">
-      <div className="glass-panel flex flex-col gap-2 overflow-y-auto scrollbar-hide py-3">
-        <div className="flex items-center gap-2 px-2 pb-2 border-b border-stone-200">
-          <Trophy className="w-5 h-5 text-warm-gold" />
-          <span className="text-xs font-bold uppercase tracking-wider hidden md:block">Tiến Hóa</span>
+    <div className="absolute left-6 top-24 bottom-6 w-16 md:w-56 hidden sm:flex flex-col z-10">
+      <div className="scroll-bg h-full flex flex-col gap-3 overflow-y-auto scrollbar-hide py-6 px-4 rounded-sm border-x-4 border-amber-900/10 shadow-inner">
+        <div className="flex flex-col items-center mb-6 pb-4 border-b-2 border-amber-900/10">
+          <Trophy className="w-8 h-8 text-amber-700 mb-2 drop-shadow-sm" />
+          <h3 className="font-serif-royal font-bold text-amber-900 text-sm tracking-[0.2em] uppercase hidden md:block">Phả Hệ</h3>
+          <span className="text-[9px] text-amber-800/60 font-serif italic hidden md:block">Gia Tộc Đế Chế</span>
         </div>
         
         {EVOLUTION_LEVELS.sort((a, b) => b.level - a.level).map((level) => {
-          const Icon = ICON_MAP[level.icon as keyof typeof ICON_MAP];
           const isReached = highestLevel >= level.level;
           
           return (
@@ -25,24 +25,24 @@ const EvolutionChart: React.FC<EvolutionChartProps> = ({ highestLevel }) => {
               key={level.level}
               initial={false}
               animate={{
-                opacity: isReached ? 1 : 0.4,
-                scale: isReached ? 1 : 0.9,
+                opacity: isReached ? 1 : 0.3,
+                x: isReached ? 0 : -5,
               }}
-              className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
-                isReached ? 'bg-white/60 shadow-sm' : 'bg-transparent'
+              className={`flex items-center gap-3 p-3 rounded-md transition-all ${
+                isReached ? 'bg-white/40 shadow-sm border border-amber-950/5' : 'bg-transparent'
               }`}
             >
               <div 
-                className="w-8 h-8 rounded-full flex items-center justify-center p-1.5 shrink-0"
-                style={{ backgroundColor: level.color, border: `2px solid ${level.color}` }}
+                className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-2 border-[#D4AF37] shadow-xl text-xl"
+                style={{ backgroundColor: level.color }}
               >
-                <Icon className={`w-full h-full ${isReached ? 'text-stone-800' : 'text-stone-400'}`} />
+                {level.emoji}
               </div>
               <div className="hidden md:flex flex-col min-w-0">
-                <span className={`text-xs font-semibold truncate ${!isReached && 'text-stone-400'}`}>
+                <span className={`text-[11px] font-serif-royal font-black tracking-tight truncate ${isReached ? 'text-amber-950' : 'text-stone-400'}`}>
                   {level.name}
                 </span>
-                <span className="text-[10px] text-stone-500">{level.points} pts</span>
+                <span className="text-[10px] font-serif italic text-amber-900/60 leading-none">Ưu thế: {level.points}</span>
               </div>
             </motion.div>
           );

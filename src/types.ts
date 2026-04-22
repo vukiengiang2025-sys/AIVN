@@ -1,7 +1,10 @@
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'extreme';
+
 export interface GameState {
   happinessPoints: number;
   highestLevelReached: number;
   gameOver: boolean;
+  difficulty: Difficulty;
 }
 
 export interface EvolutionLevel {
