@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShieldCheck, Settings, Mic, PenTool, LayoutGrid, Zap, Terminal, Activity, ListTodo, History, Info, Key, X } from 'lucide-react';
+import { ShieldCheck, Settings, Mic, PenTool, LayoutGrid, Zap, Terminal, Activity, ListTodo, History, Info, Key, X, Cpu, CloudLightning } from 'lucide-react';
 import { MagicButton } from './MagicButton';
 import { TimelineView } from './TimelineView';
 import { TimelineItem } from '../types';
-import { summarizeTranscript, generateProfessionalMessage, classifyDocument } from '../services/aiService';
+import { summarizeTranscript, generateProfessionalMessage, classifyDocument, getLocalNano } from '../services/aiService';
 
 export default function Dashboard() {
   const [items, setItems] = useState<TimelineItem[]>([]);
@@ -14,9 +14,16 @@ export default function Dashboard() {
   const [currentView, setCurrentView] = useState<'core' | 'timeline' | 'system' | 'history'>('core');
   const [showSettings, setShowSettings] = useState(false);
   const [customApiKey, setCustomApiKey] = useState('');
+  const [isNanoAvailable, setIsNanoAvailable] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const checkNano = async () => {
+      const nano = await getLocalNano();
+      setIsNanoAvailable(!!nano);
+    };
+    checkNano();
+
     const savedNotes = localStorage.getItem('pocket_secretary_notes');
     const savedKey = localStorage.getItem('pocket_secretary_custom_api_key');
     if (savedKey) setCustomApiKey(savedKey);
@@ -178,12 +185,17 @@ export default function Dashboard() {
             </h3>
             <div className="glass-card">
               <div className="flex justify-between text-[11px] mb-2 font-mono">
-                <span className="text-slate-400 tracking-wider">GEMINI FLASH</span>
-                <span className="text-cyan-400 uppercase tracking-widest">Đang chạy</span>
+                <span className="text-slate-400 tracking-wider">THỰC THI</span>
+                <span className={`${isNanoAvailable ? 'text-emerald-400' : 'text-cyan-400'} uppercase tracking-widest flex items-center gap-1`}>
+                   {isNanoAvailable ? <><Cpu size={12}/> CỤC BỘ (NANO)</> : <><CloudLightning size={12}/> ĐÁM MÂY</>}
+                </span>
               </div>
               <div className="npu-bar">
-                <motion.div initial={{ width: 0 }} animate={{ width: '85%' }} className="h-full bg-cyan-500" />
+                <motion.div initial={{ width: 0 }} animate={{ width: isNanoAvailable ? '100%' : '85%' }} className={`h-full ${isNanoAvailable ? 'bg-emerald-500' : 'bg-cyan-500'}`} />
               </div>
+              <p className="mt-2 text-[9px] text-slate-500 italic">
+                {isNanoAvailable ? "Dữ liệu không bao giờ rời khỏi thiết bị." : "Tối ưu hóa bằng Gemini Flash Cloud."}
+              </p>
             </div>
           </div>
         </section>
@@ -234,12 +246,20 @@ export default function Dashboard() {
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Sức khỏe hệ thống</h3>
                   <div className="space-y-6">
                     <div className="glass-card">
-                      <p className="text-[10px] text-slate-500 mb-2">TOÀN VẸN LÕI GEMINI</p>
-                      <div className="npu-bar"><div className="w-[92%] h-full bg-cyan-500" /></div>
+                      <p className="text-[10px] text-slate-500 mb-2">LOẠI LÕI AI</p>
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${isNanoAvailable ? 'bg-emerald-500/20 text-emerald-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
+                          {isNanoAvailable ? <Cpu size={24}/> : <CloudLightning size={24}/>}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-white">{isNanoAvailable ? "GEMINI NANO (ON-DEVICE)" : "GEMINI FLASH (CLOUD)"}</p>
+                          <p className="text-[10px] text-slate-500">{isNanoAvailable ? "Tốc độ cực cao, không cần mạng, bảo mật 100%" : "Yêu cầu kết nối mạng để đạt độ chính xác tối đa"}</p>
+                        </div>
+                      </div>
                     </div>
                     <div className="glass-card">
                       <p className="text-[10px] text-slate-500 mb-2">KHIÊN BẢO MẬT</p>
-                      <p className="text-sm text-emerald-400 font-mono">ĐÃ MÃ HÓA & CỤC BỘ</p>
+                      <p className="text-sm text-emerald-400 font-mono">ĐÃ MÃ HÓA {isNanoAvailable ? "& CỤC BỘ" : "& AN TOÀN"}</p>
                     </div>
                   </div>
                </motion.div>
