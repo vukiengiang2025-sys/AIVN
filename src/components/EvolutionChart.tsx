@@ -5,11 +5,12 @@ import { Trophy } from 'lucide-react';
 
 interface EvolutionChartProps {
   highestLevel: number;
+  customImages: Record<number, string>;
 }
 
-const EvolutionChart: React.FC<EvolutionChartProps> = ({ highestLevel }) => {
+const EvolutionChart: React.FC<EvolutionChartProps> = ({ highestLevel, customImages }) => {
   return (
-    <div className="hidden lg:flex flex-col w-64 h-[600px] max-h-[80vh] z-10 sticky top-24">
+    <div className="flex flex-col w-full h-full z-10 sticky top-24">
       <div className="scroll-bg flex-1 flex flex-col gap-3 overflow-y-auto scrollbar-hide py-6 px-4 rounded-sm border-x-4 border-amber-900/10 shadow-inner">
         <div className="flex flex-col items-center mb-6 pb-4 border-b-2 border-amber-900/10">
           <Trophy className="w-8 h-8 text-amber-700 mb-2 drop-shadow-sm" />
@@ -19,6 +20,7 @@ const EvolutionChart: React.FC<EvolutionChartProps> = ({ highestLevel }) => {
         
         {EVOLUTION_LEVELS.slice().sort((a, b) => b.level - a.level).map((level) => {
           const isReached = highestLevel >= level.level;
+          const customImg = customImages[level.level];
           
           return (
             <motion.div
@@ -33,10 +35,14 @@ const EvolutionChart: React.FC<EvolutionChartProps> = ({ highestLevel }) => {
               }`}
             >
               <div 
-                className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-2 border-[#D4AF37] shadow-xl text-xl"
+                className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-2 border-[#D4AF37] shadow-xl text-xl overflow-hidden bg-black/20"
                 style={{ backgroundColor: level.color }}
               >
-                {level.emoji}
+                {customImg ? (
+                  <img src={customImg} alt={level.name} className="w-full h-full object-cover" />
+                ) : (
+                  level.emoji
+                )}
               </div>
               <div className="flex flex-col min-w-0">
                 <span className={`text-[11px] font-serif-royal font-black tracking-tight truncate ${isReached ? 'text-amber-950' : 'text-stone-400'}`}>

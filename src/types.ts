@@ -12,6 +12,13 @@ export interface GameState {
     magnet: number;
   };
   achievements: string[];
+  customImages: Record<number, string>;
+  // New Ecosystem Features
+  holdLevel: number | null; // Stores one ball to swap
+  currency: number; // Points that can be spent
+  currentTitle: string;
+  isZenMode: boolean; // No game over mode
+  weather: 'clear' | 'windy' | 'storm' | 'snow';
 }
 
 export interface EvolutionLevel {
@@ -19,6 +26,8 @@ export interface EvolutionLevel {
   name: string;
   radius: number;
   color: string;
-  icon: string;
+  emoji: string;
   points: number;
+  lore: string;
+  customImage?: string;
 }

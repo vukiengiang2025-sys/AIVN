@@ -10,6 +10,7 @@ import confetti from 'canvas-confetti';
 export interface GameCanvasHandle {
   useHammer: () => boolean;
   useMagnet: () => boolean;
+  useHold: () => number | null; // Returns the old nextLevel to the App
 }
 
 const GameCanvas = forwardRef<GameCanvasHandle, { 
@@ -26,6 +27,23 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
   const [dropping, setDropping] = useState(false);
   const [guidePosition, setGuidePosition] = useState(200);
   const [isNearDeath, setIsNearDeath] = useState(false);
+  const imageCache = useRef<Record<number, HTMLImageElement>>({});
+
+  useEffect(() => {
+    // Pre-load custom images
+    Object.entries(gameState.customImages).forEach(([lvl, url]) => {
+      const imageUrl = url as string;
+      if (!imageUrl) {
+        delete imageCache.current[parseInt(lvl)];
+        return;
+      }
+      const img = new Image();
+      img.src = imageUrl;
+      img.onload = () => {
+        imageCache.current[parseInt(lvl)] = img;
+      };
+    });
+  }, [gameState.customImages]);
   
   // Game dimensions
   const GAME_WIDTH = 400;
@@ -41,6 +59,38 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
   const [isShaking, setIsShaking] = useState(false);
   const lastMergeTime = useRef<number>(0);
   const comboTimeout = useRef<NodeJS.Timeout | null>(null);
+  const [particles, setParticles] = useState<{ id: number, x: number, y: number, vx: number, vy: number, type: 'wind' | 'snow' }[]>([]);
+
+  useEffect(() => {
+    // Weather particle simulator
+    if (gameState.weather === 'clear') {
+      setParticles([]);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setParticles(prev => {
+        const newParticles = [...prev];
+        // Add new
+        if (newParticles.length < 50) {
+          newParticles.push({
+            id: Math.random(),
+            x: Math.random() * GAME_WIDTH,
+            y: -10,
+            vx: gameState.weather === 'windy' ? (Math.random() * 2 + 1) : (Math.random() - 0.5),
+            vy: Math.random() * 2 + 1,
+            type: gameState.weather === 'snow' ? 'snow' : 'wind'
+          });
+        }
+        // Update
+        return newParticles
+          .map(p => ({ ...p, x: p.x + p.vx, y: p.y + p.vy }))
+          .filter(p => p.y < GAME_HEIGHT && p.x >= 0 && p.x <= GAME_WIDTH);
+      });
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [gameState.weather]);
 
   const triggerShake = () => {
     setIsShaking(true);
@@ -140,6 +190,20 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
     runnerRef.current = runner;
     Matter.Runner.run(runner, engine);
     Matter.Render.run(render);
+
+    // Portal Teleportation Logic
+    Matter.Events.on(engine, 'afterUpdate', () => {
+      const bodies = Matter.Composite.allBodies(engine.world);
+      bodies.forEach(body => {
+        if ((body as any).level) {
+          if (body.position.x < -10) {
+            Matter.Body.setPosition(body, { x: GAME_WIDTH + 5, y: body.position.y });
+          } else if (body.position.x > GAME_WIDTH + 10) {
+            Matter.Body.setPosition(body, { x: -5, y: body.position.y });
+          }
+        }
+      });
+    });
 
     // Walls
     const wallOptions = { isStatic: true, render: { visible: false }, friction: 0.5 };
@@ -258,6 +322,17 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
         context.fillStyle = grad;
         context.fill();
 
+        // 3D Polish: Aura for High Level (Level >= 8)
+        if (level >= 8) {
+          context.beginPath();
+          context.arc(0, 0, levelData.radius * 1.1, 0, Math.PI * 2);
+          const auraGrad = context.createRadialGradient(0, 0, levelData.radius, 0, 0, levelData.radius * 1.15);
+          auraGrad.addColorStop(0, 'rgba(212, 175, 55, 0.4)');
+          auraGrad.addColorStop(1, 'rgba(212, 175, 55, 0)');
+          context.fillStyle = auraGrad;
+          context.fill();
+        }
+
         // Draw Imperial Golden Border
         context.lineWidth = levelData.radius < 8 ? 0.5 : 2;
         context.strokeStyle = '#D4AF37'; // Gold
@@ -270,12 +345,26 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
         context.lineWidth = 1;
         context.stroke();
 
-        // Draw Emoji
-        context.textAlign = 'center';
-        context.textBaseline = 'middle';
-        const fontSize = levelData.radius * 1.2;
-        context.font = `${fontSize}px serif`;
-        context.fillText(levelData.emoji, 0, 2);
+        // Draw Emoji or Custom Image
+        const customImg = imageCache.current[level];
+        if (customImg) {
+          context.beginPath();
+          context.arc(0, 0, levelData.radius * 0.9, 0, Math.PI * 2);
+          context.clip();
+          context.drawImage(
+            customImg, 
+            -levelData.radius * 0.9, 
+            -levelData.radius * 0.9, 
+            levelData.radius * 1.8, 
+            levelData.radius * 1.8
+          );
+        } else {
+          context.textAlign = 'center';
+          context.textBaseline = 'middle';
+          const fontSize = levelData.radius * 1.2;
+          context.font = `${fontSize}px serif`;
+          context.fillText(levelData.emoji, 0, 2);
+        }
 
         context.restore();
       });
@@ -288,6 +377,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
       const bodies = Matter.Composite.allBodies(engine.world);
       let dangerFound = false;
       const isGameOver = bodies.some(body => {
+        if (stateRef.current.isZenMode) return false;
         const b = body as any;
         if (!b.level || b.isStatic) return false;
         
@@ -314,6 +404,21 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
   }, [initGame]);
 
   useImperativeHandle(ref, () => ({
+    useHold: () => {
+      // Swaps nextLevel with gameState.holdLevel
+      const currentNext = nextLevel;
+      const storedHold = gameState.holdLevel;
+      
+      if (storedHold === null) {
+        // Just store current and get a new random
+        setNextLevel(Math.floor(Math.random() * getDifficultySettings().maxDropLevel) + 1);
+        return currentNext;
+      } else {
+        // Swap
+        setNextLevel(storedHold);
+        return currentNext;
+      }
+    },
     useHammer: () => {
       if (!engineRef.current || gameState.gameOver) return false;
       const bodies = Matter.Composite.allBodies(engineRef.current.world);
@@ -434,6 +539,10 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
+      {/* Portals Visuals */}
+      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-32 bg-cyan-400/30 blur-[2px] z-20 rounded-r-full" />
+      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-32 bg-cyan-400/30 blur-[2px] z-20 rounded-l-full" />
+
       {/* Decorative Corners */}
       <div className="corner-ornament top-0 left-0" />
       <div className="corner-ornament top-0 right-0 rotate-90" />
@@ -449,6 +558,15 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
       
       {/* Visual Effects Layer */}
       <div className="absolute inset-0 pointer-events-none z-30">
+        {/* Weather Particles */}
+        {particles.map(p => (
+           <div 
+             key={p.id}
+             className={`absolute ${p.type === 'snow' ? 'w-1.5 h-1.5 bg-white/60 rounded-full blur-[1px]' : 'w-4 h-[1px] bg-sky-200/30'}`}
+             style={{ left: p.x, top: p.y, transform: p.type === 'wind' ? `rotate(15deg)` : 'none' }}
+           />
+        ))}
+
         {hearts.map(heart => (
           <div 
             key={heart.id}
@@ -518,12 +636,40 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
                 backgroundColor: nextLevelData.color,
                 width: `${nextLevelData.radius * 2}px`,
                 height: `${nextLevelData.radius * 2}px`,
-                fontSize: `${nextLevelData.radius}px`
+                fontSize: `${nextLevelData.radius}px`,
+                overflow: 'hidden'
               }}
             >
-              {nextLevelData.emoji}
+              {imageCache.current[nextLevel] ? (
+                <img src={gameState.customImages[nextLevel]} alt="Next" className="w-full h-full object-cover" />
+              ) : (
+                nextLevelData.emoji
+              )}
             </div>
             <div className="w-px h-64 bg-stone-400/20 mt-2" />
+
+            {/* Ghost Preview Ball at Bottom */}
+            <div 
+               className="absolute top-[520px] opacity-20 pointer-events-none"
+               style={{ transform: `scale(0.8)` }}
+            >
+               <div 
+                className="rounded-full flex items-center justify-center border border-white"
+                style={{ 
+                  backgroundColor: nextLevelData.color,
+                  width: `${nextLevelData.radius * 2}px`,
+                  height: `${nextLevelData.radius * 2}px`,
+                  fontSize: `${nextLevelData.radius}px`,
+                  overflow: 'hidden'
+                }}
+              >
+                {imageCache.current[nextLevel] ? (
+                  <img src={gameState.customImages[nextLevel]} alt="Ghost" className="w-full h-full object-cover" />
+                ) : (
+                  nextLevelData.emoji
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
