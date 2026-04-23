@@ -10,8 +10,8 @@ interface EvolutionChartProps {
 
 const EvolutionChart: React.FC<EvolutionChartProps> = ({ highestLevel, customImages }) => {
   return (
-    <div className="flex flex-col w-full h-full z-10 sticky top-24">
-      <div className="scroll-bg flex-1 flex flex-col gap-3 overflow-y-auto scrollbar-hide py-6 px-4 rounded-sm border-x-4 border-amber-900/10 shadow-inner">
+    <div className="flex flex-col w-full h-full z-10">
+      <div className="flex-1 flex flex-col gap-3 overflow-y-auto scrollbar-hide py-6 px-4 rounded-[2rem] bg-stone-900/60 border-2 border-amber-900/20 shadow-inner backdrop-blur-sm">
         <div className="flex flex-col items-center mb-6 pb-4 border-b-2 border-amber-900/10">
           <Trophy className="w-8 h-8 text-amber-700 mb-2 drop-shadow-sm" />
           <h3 className="font-serif-royal font-bold text-amber-900 text-sm tracking-[0.2em] uppercase">Phả Hệ</h3>
@@ -38,7 +38,7 @@ const EvolutionChart: React.FC<EvolutionChartProps> = ({ highestLevel, customIma
                 className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-2 border-[#D4AF37] shadow-xl text-xl overflow-hidden bg-black/20"
                 style={{ backgroundColor: level.color }}
               >
-                {customImg ? (
+                {(customImg && customImg !== "") ? (
                   <img src={customImg} alt={level.name} className="w-full h-full object-cover" />
                 ) : (
                   level.emoji

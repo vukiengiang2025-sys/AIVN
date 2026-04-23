@@ -3,7 +3,7 @@ import GameCanvas, { GameCanvasHandle } from './components/GameCanvas';
 import EvolutionChart from './components/EvolutionChart';
 import BallCustomizer from './components/BallCustomizer';
 import { GameState, Difficulty } from './types';
-import { Heart, Info, RotateCcw, Trophy, Hammer, Magnet, Settings as SettingsIcon } from 'lucide-react';
+import { Heart, Info, RotateCcw, Trophy, Hammer, Magnet, Zap, Settings as SettingsIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { EVOLUTION_LEVELS } from './constants';
@@ -40,7 +40,10 @@ export default function App() {
       currency: 0,
       currentTitle: 'Dân Thường',
       isZenMode: false,
-      weather: 'clear'
+      weather: 'clear',
+      talents: [],
+      harvestMode: false,
+      sagaProgress: 0
     };
   });
 
@@ -106,8 +109,21 @@ export default function App() {
       // Update Title & Currency if points increased
       if (newState.happinessPoints && newState.happinessPoints > prev.happinessPoints) {
         const diff = newState.happinessPoints - prev.happinessPoints;
-        updated.currency = Math.floor(prev.currency + diff);
+        const multiplier = prev.talents.includes('Đại Phú Gia') ? 1.5 : 1;
+        updated.currency = Math.floor(prev.currency + (diff * multiplier));
         updated.currentTitle = updateTitle(updated.happinessPoints);
+
+        // Update Saga Progress based on titles
+        const titleIndex = TITLES.findIndex(t => t.title === updated.currentTitle);
+        updated.sagaProgress = Math.floor(((titleIndex + 1) / TITLES.length) * 100);
+
+        // Unlock Passive Talents based on milestones
+        if (updated.highestLevelReached >= 10 && !prev.talents.includes('Đại Phú Gia')) {
+           updated.talents = [...prev.talents, 'Đại Phú Gia']; // +50% Coin Gain
+        }
+        if (updated.happinessPoints >= 100000 && !prev.talents.includes('Bậc Thầy Gộp')) {
+           updated.talents = [...prev.talents, 'Bậc Thầy Gộp']; // Unlocks more rewards
+        }
       }
 
       if (typeof window !== 'undefined' && updated.highScore > prev.highScore) {
@@ -142,7 +158,20 @@ export default function App() {
       <main className="w-full max-w-[1400px] flex flex-col sm:flex-row items-stretch justify-center gap-4 relative z-10 px-2 py-4 h-full sm:h-[90vh]">
         
         {/* COLUMN 1: Evolution Hierarchy (Sidebar Left) */}
-        <div className="hidden md:flex w-56 flex-col gap-4 shrink-0 h-full overflow-hidden">
+        <div className="hidden md:flex w-72 flex-col gap-3 shrink-0 h-full overflow-y-auto custom-scrollbar pr-1">
+           {/* Noble Title Section - MOVED TO LEFT FOR BALANCE */}
+           <div className="bg-stone-900/80 p-5 rounded-[2rem] border-2 border-amber-900/30 flex flex-col items-center shadow-2xl backdrop-blur-md">
+              <div className="text-amber-600 text-[10px] uppercase font-black tracking-[0.5em] mb-2 opacity-80">Tước Hiệu Gia Tộc</div>
+              <motion.div 
+                key={gameState.currentTitle}
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                className="text-2xl font-serif-royal font-black text-white text-center tracking-widest drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
+              >
+                {gameState.currentTitle}
+              </motion.div>
+           </div>
+
            <EvolutionChart 
               highestLevel={gameState.highestLevelReached} 
               customImages={gameState.customImages}
@@ -151,7 +180,7 @@ export default function App() {
 
         {/* COLUMN 2: Central Game Area */}
         <div className="flex flex-col items-center shrink-0 justify-center">
-          <header className="w-full max-w-[400px] mb-4 flex items-center justify-between gap-2">
+          <header className="w-full max-w-[420px] mb-4 flex items-center justify-between gap-2">
             <div className="flex gap-2">
               <motion.div 
                 key={gameState.happinessPoints}
@@ -257,7 +286,7 @@ export default function App() {
           </div>
 
           {/* Difficulty & Weather Toggles within central console */}
-          <div className="mt-4 flex flex-col gap-3 w-full max-w-[400px]">
+          <div className="mt-4 flex flex-col gap-3 w-full max-w-[420px]">
             <div className="flex bg-stone-900/80 p-1.5 rounded-2xl border border-amber-900/30 justify-center backdrop-blur-md">
               {(['clear', 'windy', 'snow'] as const).map((w) => (
                 <button
@@ -293,103 +322,157 @@ export default function App() {
         </div>
 
         {/* COLUMN 3: Imperial Dashboard (Right Sidebar) */}
-        <div className="flex-1 flex flex-col gap-4 w-full sm:max-w-[220px] md:max-w-xs h-full overflow-y-auto custom-scrollbar pr-1 scrollbar-hide">
+        <div className="flex-1 flex flex-col gap-3 w-full sm:max-w-[240px] md:max-w-sm h-full overflow-y-auto custom-scrollbar pr-1 scrollbar-hide">
           
-          {/* Noble Title Section */}
-          <div className="bg-stone-900/80 p-6 rounded-[2rem] border-2 border-amber-900/30 flex flex-col items-center shadow-2xl backdrop-blur-md">
-             <div className="text-amber-600 text-[10px] uppercase font-black tracking-[0.5em] mb-3 opacity-80">Tước Hiệu Hiệu Triệu</div>
-             <motion.div 
-               key={gameState.currentTitle}
-               initial={{ y: 20, opacity: 0 }}
-               animate={{ y: 0, opacity: 1 }}
-               className="text-3xl font-serif-royal font-black text-white text-center tracking-widest drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] mb-6"
-             >
-               {gameState.currentTitle}
-             </motion.div>
-             <div className="w-full flex items-center justify-between px-6 py-4 bg-black/60 rounded-2xl border border-amber-900/20 shadow-inner">
+          {/* Live Family Lineage (Recent Merges History hint) */}
+          <div className="bg-stone-900/80 p-4 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md">
+             <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-[0.3em] mb-3 border-b border-amber-900/20 pb-2">Nhật Ký Dòng Tộc (Kỷ Lục)</div>
+             <div className="flex flex-wrap gap-1.5 justify-center">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className={`w-8 h-8 rounded-full border-2 border-amber-900/20 flex items-center justify-center text-base ${
+                    gameState.highestLevelReached >= (i + 5) ? 'bg-amber-600/20 opacity-100 grayscale-0' : 'bg-black/40 opacity-20 grayscale'
+                  }`}>
+                    {EVOLUTION_LEVELS[Math.min(i + 4, EVOLUTION_LEVELS.length - 1)].emoji}
+                  </div>
+                ))}
+             </div>
+             <p className="text-[7px] text-stone-500 mt-3 text-center">Ghi dấu những mốc son chói lọi của gia đình bạn.</p>
+          </div>
+
+          {/* Currency Section */}
+          <div className="bg-stone-900/80 p-4 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md">
+             <div className="w-full flex items-center justify-between px-3 py-3 bg-black/60 rounded-2xl border border-amber-900/20 shadow-inner">
                 <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-700 flex items-center justify-center shadow-lg">
-                      <Trophy className="w-5 h-5 text-amber-950" />
+                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-700 flex items-center justify-center shadow-lg">
+                      <Trophy className="w-3.5 h-3.5 text-amber-950" />
                    </div>
                    <div className="flex flex-col">
-                      <span className="text-[9px] text-stone-500 font-black uppercase">Tài sản gia bảo</span>
-                      <span className="text-xs font-bold text-stone-300">Xu vàng tích lũy</span>
+                      <span className="text-[7px] text-stone-500 font-black uppercase">Tài sản</span>
+                      <span className="text-[9px] font-bold text-stone-300 leading-tight">Xu vàng</span>
                    </div>
                 </div>
-                <span className="text-2xl font-black text-amber-400 font-mono tracking-tighter">{gameState.currency.toLocaleString()}</span>
+                <span className="text-lg font-black text-amber-400 font-mono tracking-tighter">{gameState.currency.toLocaleString()}</span>
              </div>
           </div>
 
           {/* Action Center: Powerups & Hold */}
-          <div className="bg-stone-900/80 p-6 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md">
-            <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-[0.3em] mb-5 border-b border-amber-900/20 pb-2">Hành Động Chiến Thuật</div>
-            <div className="flex items-stretch gap-6">
-               {/* Hold Slot */}
-               <div className="flex flex-col items-center gap-2">
-                  <button
-                    onClick={handleHold}
-                    className="w-20 h-20 bg-black/80 border-4 border-amber-600/50 rounded-3xl flex items-center justify-center relative overflow-hidden transition-all active:scale-90 hover:border-amber-400 hover:shadow-[0_0_30px_rgba(217,119,6,0.3)] group"
-                  >
-                    {gameState.holdLevel ? (
-                      <div className="w-full h-full flex items-center justify-center text-4xl transform group-hover:scale-110 transition-transform">
-                        {gameState.customImages[gameState.holdLevel] ? (
-                          <img src={gameState.customImages[gameState.holdLevel]} className="w-full h-full object-cover" />
-                        ) : (
-                          EVOLUTION_LEVELS[gameState.holdLevel - 1].emoji
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-1 opacity-20 group-hover:opacity-100 transition-opacity">
-                         <RotateCcw className="w-6 h-6 text-amber-600" />
-                         <span className="text-[9px] font-black text-amber-600 uppercase">Dự trữ</span>
-                      </div>
-                    )}
-                  </button>
-                  <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-1">Hoán Đổi</span>
-               </div>
+          <div className="bg-stone-900/80 p-5 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md">
+             <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-[0.3em] mb-4 border-b border-amber-900/20 pb-2">Hành Động Chiến Thuật</div>
+             <div className="flex items-stretch gap-4">
+                {/* Hold Slot */}
+                <div className="flex flex-col items-center gap-1">
+                   <button
+                     onClick={handleHold}
+                     className="w-16 h-16 bg-black/80 border-4 border-amber-600/50 rounded-2xl flex items-center justify-center relative overflow-hidden transition-all active:scale-90 hover:border-amber-400 hover:shadow-[0_0_30px_rgba(217,119,6,0.3)] group"
+                   >
+                     {gameState.holdLevel ? (
+                       <div className="w-full h-full flex items-center justify-center text-3xl transform group-hover:scale-110 transition-transform">
+                         {(gameState.holdLevel && gameState.customImages[gameState.holdLevel]) ? (
+                           <img src={gameState.customImages[gameState.holdLevel] || undefined} className="w-full h-full object-cover" />
+                         ) : (
+                           EVOLUTION_LEVELS[gameState.holdLevel - 1].emoji
+                         )}
+                       </div>
+                     ) : (
+                       <div className="flex flex-col items-center gap-0.5 opacity-20 group-hover:opacity-100 transition-opacity">
+                          <RotateCcw className="w-5 h-5 text-amber-600" />
+                          <span className="text-[8px] font-black text-amber-600 uppercase">Dự trữ</span>
+                       </div>
+                     )}
+                   </button>
+                   <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Dự Trữ</span>
+                </div>
 
-               {/* Powerups Shop Area */}
-               <div className="flex-1 flex flex-col gap-4">
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => handleUsePowerUp('hammer')}
-                      disabled={gameState.powerUps.hammer <= 0}
-                      className="flex-1 h-14 bg-amber-900/40 border-2 border-amber-600/50 rounded-2xl flex items-center justify-center gap-3 text-white font-black hover:bg-amber-900 transition-all disabled:opacity-20 shadow-lg"
-                    >
-                      <Hammer className="w-5 h-5 text-amber-400" />
-                      <span className="text-xl">{gameState.powerUps.hammer}</span>
-                    </button>
-                    <button 
-                       onClick={() => buyPowerUp('hammer')}
-                       disabled={gameState.currency < 2000}
-                       className="w-12 h-14 rounded-2xl bg-amber-600 hover:bg-amber-500 flex items-center justify-center text-black font-black text-2xl shadow-lg disabled:opacity-20 transition-all"
-                    >+</button>
-                  </div>
+                {/* Powerups Shop Area */}
+                <div className="flex-1 flex flex-col gap-3">
+                   <div className="flex items-center gap-2">
+                     <button 
+                       onClick={() => handleUsePowerUp('hammer')}
+                       disabled={gameState.powerUps.hammer <= 0}
+                       className="flex-1 h-12 bg-amber-900/40 border-2 border-amber-600/50 rounded-2xl flex items-center justify-center gap-2 text-white font-black hover:bg-amber-900 shadow-[0_5px_0_rgba(120,53,15,1)] active:translate-y-1 active:shadow-none transition-all disabled:opacity-20 disabled:translate-y-0 disabled:shadow-none"
+                     >
+                       <Hammer className="w-4 h-4 text-amber-400" />
+                       <span className="text-lg">{gameState.powerUps.hammer}</span>
+                     </button>
+                     <button 
+                        onClick={() => buyPowerUp('hammer')}
+                        disabled={gameState.currency < 2000}
+                        className="w-10 h-12 rounded-2xl bg-amber-600 hover:bg-amber-500 flex items-center justify-center text-black font-black text-xl shadow-[0_5px_0_rgba(180,83,9,1)] active:translate-y-1 active:shadow-none transition-all disabled:opacity-20 disabled:translate-y-0 disabled:shadow-none"
+                     >+</button>
+                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => handleUsePowerUp('magnet')}
-                      disabled={gameState.powerUps.magnet <= 0}
-                      className="flex-1 h-14 bg-amber-900/40 border-2 border-amber-600/50 rounded-2xl flex items-center justify-center gap-3 text-white font-black hover:bg-amber-900 transition-all disabled:opacity-20 shadow-lg"
-                    >
-                      <Magnet className="w-5 h-5 text-amber-400" />
-                      <span className="text-xl">{gameState.powerUps.magnet}</span>
-                    </button>
-                    <button 
-                       onClick={() => buyPowerUp('magnet')}
-                       disabled={gameState.currency < 2000}
-                       className="w-12 h-14 rounded-2xl bg-amber-600 hover:bg-amber-500 flex items-center justify-center text-black font-black text-2xl shadow-lg disabled:opacity-20 transition-all"
-                    >+</button>
-                  </div>
-                  <div className="text-[9px] text-stone-500 font-bold uppercase tracking-tight text-center">Tư hữu thêm: 2000 Xu / Lễ</div>
-               </div>
-            </div>
+                   <div className="flex items-center gap-2">
+                     <button 
+                       onClick={() => handleUsePowerUp('magnet')}
+                       disabled={gameState.powerUps.magnet <= 0}
+                       className="flex-1 h-12 bg-amber-900/40 border-2 border-amber-600/50 rounded-2xl flex items-center justify-center gap-2 text-white font-black hover:bg-amber-900 shadow-[0_5px_0_rgba(120,53,15,1)] active:translate-y-1 active:shadow-none transition-all disabled:opacity-20 disabled:translate-y-0 disabled:shadow-none"
+                     >
+                       <Magnet className="w-4 h-4 text-amber-400" />
+                       <span className="text-lg">{gameState.powerUps.magnet}</span>
+                     </button>
+                     <button 
+                        onClick={() => buyPowerUp('magnet')}
+                        disabled={gameState.currency < 2000}
+                        className="w-10 h-12 rounded-2xl bg-amber-600 hover:bg-amber-500 flex items-center justify-center text-black font-black text-xl shadow-[0_5px_0_rgba(180,83,9,1)] active:translate-y-1 active:shadow-none transition-all disabled:opacity-20 disabled:translate-y-0 disabled:shadow-none"
+                     >+</button>
+                   </div>
+                </div>
+             </div>
           </div>
 
           {/* Daily Quests Center */}
-          <div className="bg-stone-900/80 p-6 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md flex-1">
-             <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-[0.3em] mb-6 border-b border-amber-900/20 pb-2">Nhiệm Vụ Dòng Tộc</div>
-             <div className="flex flex-col gap-6">
+          <div className="bg-stone-900/80 p-5 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md">
+             <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-[0.3em] mb-4 border-b border-amber-900/20 pb-2">Tiến Độ (Saga)</div>
+             <div className="flex flex-col gap-3">
+                <div className="relative h-20 bg-black/40 rounded-2xl border border-amber-900/10 overflow-hidden p-2">
+                   <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/old-map.png')] bg-cover" />
+                   <div className="relative z-10 flex items-center justify-between h-full px-3">
+                      <div className="flex flex-col">
+                         <span className="text-[8px] text-stone-500 font-bold uppercase">Sử Thi</span>
+                         <span className="text-lg font-serif-royal font-black text-amber-200">{gameState.sagaProgress}%</span>
+                      </div>
+                      <div className="w-16 h-16 relative flex items-center justify-center">
+                         <svg className="w-full h-full transform -rotate-90">
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-stone-800" />
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" strokeDasharray={176} strokeDashoffset={176 - (176 * gameState.sagaProgress) / 100} className="text-amber-500 transition-all duration-1000" />
+                         </svg>
+                         <div className="absolute inset-0 flex items-center justify-center">
+                            <Zap className={`w-5 h-5 ${gameState.sagaProgress === 100 ? 'text-amber-400' : 'text-stone-700'}`} />
+                         </div>
+                      </div>
+                   </div>
+                </div>
+             </div>
+          </div>
+
+          {/* Passive Talents Section */}
+          <div className="bg-stone-900/80 p-5 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md">
+             <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-[0.3em] mb-3 border-b border-amber-900/20 pb-2">Thiên Phú</div>
+             <div className="flex flex-col gap-2">
+                <div className={`flex items-center gap-2 p-2 rounded-2xl border-2 transition-all ${gameState.talents.includes('Đại Phú Gia') ? 'bg-amber-900/40 border-amber-500' : 'bg-black/20 border-stone-800 opacity-40'}`}>
+                   <div className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center shadow-lg shrink-0">
+                      <Zap className="w-4 h-4 text-white" />
+                   </div>
+                   <div className="flex flex-col">
+                      <span className="text-[9px] font-black text-amber-200 uppercase">ĐẠI PHÚ GIA</span>
+                      <p className="text-[7px] text-stone-400 leading-tight">+50% Xu</p>
+                   </div>
+                </div>
+                <div className={`flex items-center gap-2 p-2 rounded-2xl border-2 transition-all ${gameState.talents.includes('Bậc Thầy Gộp') ? 'bg-amber-900/40 border-amber-500' : 'bg-black/20 border-stone-800 opacity-40'}`}>
+                   <div className="w-8 h-8 rounded-full bg-stone-700 flex items-center justify-center shadow-lg shrink-0">
+                      <Zap className="w-4 h-4 text-amber-400" />
+                   </div>
+                   <div className="flex flex-col">
+                      <span className="text-[9px] font-black text-amber-200 uppercase">BẬC THẦY GỘP</span>
+                      <p className="text-[7px] text-stone-400 leading-tight">Sóng xung kích</p>
+                   </div>
+                </div>
+             </div>
+          </div>
+          
+          <div className="bg-stone-900/80 p-5 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md flex-1">
+             <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-[0.3em] mb-4 border-b border-amber-900/20 pb-2">Nhiệm Vụ Dòng Tộc</div>
+             <div className="flex flex-col gap-4">
                 {[
                   { label: "Kiến tạo Tổ Ấm (Cấp 10)", goal: 10, current: gameState.highestLevelReached },
                   { label: "Đại Phú Hào (50.000 Xu)", goal: 50000, current: gameState.happinessPoints },

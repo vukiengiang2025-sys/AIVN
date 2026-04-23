@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { EVOLUTION_LEVELS } from '../constants';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import Cropper from 'react-easy-crop'
+import type { Point, Area } from 'react-easy-crop'
 
 interface BallCustomizerProps {
   customImages: Record<number, string>;
@@ -11,14 +13,77 @@ interface BallCustomizerProps {
 }
 
 const BallCustomizer: React.FC<BallCustomizerProps> = ({ customImages, onUpdateImage, isOpen, onClose }) => {
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [activeLevel, setActiveLevel] = useState<number | null>(null);
+  const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
+  const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  const createImage = (url: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      image.addEventListener('load', () => resolve(image));
+      image.addEventListener('error', (error) => reject(error));
+      image.setAttribute('crossOrigin', 'anonymous');
+      image.src = url;
+    });
+
+  const getCroppedImg = async (imageSrc: string, pixelCrop: Area): Promise<string | null> => {
+    const image = await createImage(imageSrc);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) return null;
+
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+
+    ctx.drawImage(
+      image,
+      pixelCrop.x,
+      pixelCrop.y,
+      pixelCrop.width,
+      pixelCrop.height,
+      0,
+      0,
+      pixelCrop.width,
+      pixelCrop.height
+    );
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve(null);
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => resolve(reader.result as string);
+      }, 'image/jpeg');
+    });
+  };
+
   const handleFileChange = (level: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        onUpdateImage(level, reader.result as string);
+        setImageToCrop(reader.result as string);
+        setActiveLevel(level);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveCrop = async () => {
+    if (imageToCrop && croppedAreaPixels && activeLevel !== null) {
+      const croppedImage = await getCroppedImg(imageToCrop, croppedAreaPixels);
+      if (croppedImage) {
+        onUpdateImage(activeLevel, croppedImage);
+      }
+      setImageToCrop(null);
+      setActiveLevel(null);
     }
   };
 
@@ -60,8 +125,8 @@ const BallCustomizer: React.FC<BallCustomizerProps> = ({ customImages, onUpdateI
                     <div 
                       className="w-16 h-16 rounded-full flex items-center justify-center border-2 border-[#D4AF37] shadow-lg  overflow-hidden bg-black/40"
                     >
-                      {customImages[level.level] ? (
-                        <img src={customImages[level.level]} alt={level.name} className="w-full h-full object-cover" />
+                      {(customImages[level.level] && customImages[level.level] !== "") ? (
+                        <img src={customImages[level.level] || undefined} alt={level.name} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-3xl">{level.emoji}</span>
                       )}
@@ -87,12 +152,73 @@ const BallCustomizer: React.FC<BallCustomizerProps> = ({ customImages, onUpdateI
                         className="hidden" 
                         accept="image/*" 
                         onChange={(e) => handleFileChange(level.level, e)} 
+                        onClick={(e) => (e.currentTarget.value = '')}
                       />
                     </label>
                   </div>
                 </div>
               ))}
             </div>
+
+            {/* Cropping Modal */}
+            <AnimatePresence>
+              {imageToCrop && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[110] flex flex-col items-center justify-center bg-black/90 p-4"
+                >
+                  <div className="relative w-full max-w-lg aspect-square bg-stone-900 rounded-2xl overflow-hidden shadow-2xl border-2 border-amber-900/40">
+                    <Cropper
+                      image={imageToCrop}
+                      crop={crop}
+                      zoom={zoom}
+                      aspect={1}
+                      cropShape="round"
+                      onCropChange={setCrop}
+                      onCropComplete={onCropComplete}
+                      onZoomChange={setZoom}
+                    />
+                  </div>
+                  
+                  <div className="mt-8 flex flex-col items-center gap-6 w-full max-w-lg">
+                    <div className="w-full flex flex-col gap-2">
+                       <span className="text-[10px] text-amber-500 font-black uppercase tracking-widest text-center">Phóng to / Thu nhỏ</span>
+                       <input
+                        type="range"
+                        value={zoom}
+                        min={1}
+                        max={3}
+                        step={0.1}
+                        aria-labelledby="Zoom"
+                        onChange={(e) => setZoom(Number(e.target.value))}
+                        className="w-full accent-amber-500"
+                      />
+                    </div>
+
+                    <div className="flex gap-4 w-full">
+                      <button
+                        onClick={() => {
+                          setImageToCrop(null);
+                          setActiveLevel(null);
+                        }}
+                        className="flex-1 py-4 bg-stone-800 text-stone-300 font-serif-royal font-bold rounded-xl active:scale-95 transition-all border border-stone-700"
+                      >
+                        HỦY
+                      </button>
+                      <button
+                        onClick={handleSaveCrop}
+                        className="flex-2 py-4 bg-gradient-to-r from-amber-500 to-amber-700 text-white font-serif-royal font-black tracking-widest rounded-xl shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all border border-amber-400/30"
+                      >
+                        <Check className="w-5 h-5" />
+                        XÁC NHẬN CẮT
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <button 
               onClick={onClose}

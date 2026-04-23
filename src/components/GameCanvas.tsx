@@ -46,8 +46,8 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
   }, [gameState.customImages]);
   
   // Game dimensions
-  const GAME_WIDTH = 400;
-  const GAME_HEIGHT = 600;
+  const GAME_WIDTH = 420;
+  const GAME_HEIGHT = 650;
 
   const stateRef = useRef(gameState);
   stateRef.current = gameState;
@@ -238,6 +238,19 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
               const newBody = createCircle(newX, newY, nextLevelData.level);
               Matter.World.remove(engine.world, [bodyA, bodyB]);
               Matter.World.add(engine.world, newBody);
+              
+              // Unlocked 'Bậc Thầy Gộp' adds a shockwave
+              if (stateRef.current.talents.includes('Bậc Thầy Gộp')) {
+                 const worldBodies = Matter.Composite.allBodies(engine.world);
+                 worldBodies.forEach(b => {
+                   const d = Matter.Vector.magnitude(Matter.Vector.sub(b.position, {x: newX, y: newY}));
+                   if (d < 150 && b !== newBody && !(b as any).isStatic) {
+                      const forceDir = Matter.Vector.normalise(Matter.Vector.sub(b.position, {x: newX, y: newY}));
+                      const forceMagnitude = 0.05 * (1 - d/150);
+                      Matter.Body.applyForce(b, b.position, Matter.Vector.mult(forceDir, forceMagnitude));
+                   }
+                 });
+              }
               
               // Calculate Combo
               const now = Date.now();
@@ -474,10 +487,11 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
   const createCircle = (x: number, y: number, level: number) => {
     const levelData = EVOLUTION_LEVELS[level - 1];
     const settings = getDifficultySettings();
+    const friction = gameState.weather === 'snow' ? 0.8 : settings.friction;
 
     const body = Matter.Bodies.circle(x, y, levelData.radius, {
       restitution: 0.2, // Lower bounciness
-      friction: settings.friction, // Dynamic friction
+      friction: friction, // Dynamic friction
       frictionAir: 0.01,
       density: 0.001 * level,
       render: { visible: false } 
@@ -520,8 +534,27 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
     const settings = getDifficultySettings();
     
     setDropping(true);
-    const body = createCircle(guidePosition, 30, nextLevel);
+    let startX = guidePosition;
+    
+    // Wind Effect: Push starting position slightly
+    if (gameState.weather === 'windy') {
+       startX += (Math.random() - 0.2) * 15;
+    }
+
+    const body = createCircle(startX, 30, nextLevel);
     Matter.World.add(engineRef.current.world, body);
+    
+    // Apply initial gust if windy
+    if (gameState.weather === 'windy') {
+       Matter.Body.applyForce(body, body.position, { x: 0.002, y: 0 });
+    }
+
+    // Rare Event: Lucky Drop (1% chance for a Celestial level 11 ball)
+    if (Math.random() < 0.01) {
+       const luckyBody = createCircle(startX, 30, 11);
+       Matter.World.add(engineRef.current.world, luckyBody);
+       spawnEffects(startX, 60, 50, 11, 0);
+    }
     
     setTimeout(() => {
       setNextLevel(Math.floor(Math.random() * settings.maxDropLevel) + 1);
@@ -634,14 +667,14 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
               className="rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-bounce"
               style={{ 
                 backgroundColor: nextLevelData.color,
-                width: `${nextLevelData.radius * 2}px`,
-                height: `${nextLevelData.radius * 2}px`,
-                fontSize: `${nextLevelData.radius}px`,
+                width: `${Math.min(nextLevelData.radius * 2, 60)}px`,
+                height: `${Math.min(nextLevelData.radius * 2, 60)}px`,
+                fontSize: `${Math.min(nextLevelData.radius, 30)}px`,
                 overflow: 'hidden'
               }}
             >
-              {imageCache.current[nextLevel] ? (
-                <img src={gameState.customImages[nextLevel]} alt="Next" className="w-full h-full object-cover" />
+              {(imageCache.current[nextLevel] && gameState.customImages[nextLevel]) ? (
+                <img src={gameState.customImages[nextLevel] || undefined} alt="Next" className="w-full h-full object-cover" />
               ) : (
                 nextLevelData.emoji
               )}
@@ -657,14 +690,14 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
                 className="rounded-full flex items-center justify-center border border-white"
                 style={{ 
                   backgroundColor: nextLevelData.color,
-                  width: `${nextLevelData.radius * 2}px`,
-                  height: `${nextLevelData.radius * 2}px`,
-                  fontSize: `${nextLevelData.radius}px`,
+                  width: `${Math.min(nextLevelData.radius * 2, 60)}px`,
+                  height: `${Math.min(nextLevelData.radius * 2, 60)}px`,
+                  fontSize: `${Math.min(nextLevelData.radius, 30)}px`,
                   overflow: 'hidden'
                 }}
               >
-                {imageCache.current[nextLevel] ? (
-                  <img src={gameState.customImages[nextLevel]} alt="Ghost" className="w-full h-full object-cover" />
+                {(imageCache.current[nextLevel] && gameState.customImages[nextLevel]) ? (
+                  <img src={gameState.customImages[nextLevel] || undefined} alt="Ghost" className="w-full h-full object-cover" />
                 ) : (
                   nextLevelData.emoji
                 )}
