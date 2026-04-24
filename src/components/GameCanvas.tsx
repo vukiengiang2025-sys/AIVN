@@ -24,6 +24,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
   const runnerRef = useRef<Matter.Runner | null>(null);
   
   const [nextLevel, setNextLevel] = useState(1);
+  const [nextRenderKey, setNextRenderKey] = useState(() => Math.floor(Math.random() * 18) + 1);
   const [dropping, setDropping] = useState(false);
   const [guidePosition, setGuidePosition] = useState(200);
   const [isNearDeath, setIsNearDeath] = useState(false);
@@ -361,7 +362,10 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
         const level = (body as any).level;
         if (!level || (body as any).isMerging) return;
 
+        const renderKey = (body as any).renderImageKey || level;
+        const renderStyle = getLevelData(renderKey);
         const levelData = getLevelData(level);
+
         const { x, y } = body.position;
         const angle = body.angle;
 
@@ -381,7 +385,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
           0, 0, levelData.radius
         );
         grad.addColorStop(0, '#FFFFFF'); // Highlight
-        grad.addColorStop(0.2, levelData.color);
+        grad.addColorStop(0.2, renderStyle.color);
         grad.addColorStop(1, 'rgba(0,0,0,0.4)'); // Depth
         
         context.fillStyle = grad;
@@ -411,7 +415,6 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
         context.stroke();
 
         // Draw Emoji or Custom Image
-        const renderKey = (body as any).renderImageKey || level;
         const customImg = imageCache.current[renderKey];
         if (customImg) {
           context.beginPath();
@@ -429,7 +432,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
           context.textBaseline = 'middle';
           const fontSize = levelData.radius * 1.2;
           context.font = `${fontSize}px serif`;
-          context.fillText(levelData.emoji, 0, 2);
+          context.fillText(getLevelData(renderKey).emoji, 0, 2);
         }
 
         context.restore();
@@ -558,12 +561,8 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
     });
     (body as any).level = level;
     
-    // Assign a random render image (1-15) for normal balls for surprise factor! (30% chance)
-    if (level <= 15 && Math.random() < 0.3) {
-      (body as any).renderImageKey = Math.floor(Math.random() * 15) + 1;
-    } else {
-      (body as any).renderImageKey = level;
-    }
+    // Assign a completely random render image (1-18) for ALL balls for absolute surprise factor!
+    (body as any).renderImageKey = Math.floor(Math.random() * 18) + 1;
     
     (body as any).createdAt = Date.now();
     (body as any).isMerging = false;
@@ -610,6 +609,8 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
     }
 
     const body = createCircle(startX, 30, nextLevel);
+    // Apply the pre-calculated random image key so the preview matches what is dropped
+    (body as any).renderImageKey = nextRenderKey;
     Matter.World.add(engineRef.current.world, body);
     
     // Apply initial gust if windy
@@ -626,11 +627,19 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
     
     setTimeout(() => {
       let randNext = Math.floor(Math.random() * settings.maxDropLevel) + 1;
+      
+      // Mở rộng một chút xíu (đôi lúc ra bóng to hơn max drop level 1-2 cấp) nhưng không chơi tới bóng 15 vì sẽ tử vong ngay
+      if (Math.random() < 0.15) {
+         randNext = Math.min(10, randNext + Math.floor(Math.random() * 3) + 1);
+      }
+
       const powerRoll = Math.random();
       if (powerRoll < 0.02) randNext = 16; // 2% Wildcard
       else if (powerRoll < 0.04) randNext = 17; // 2% Bomb 
       else if (powerRoll < 0.06) randNext = 18; // 2% Black Hole
+      
       setNextLevel(randNext);
+      setNextRenderKey(Math.floor(Math.random() * 18) + 1);
       setDropping(false);
     }, 600);
   };
@@ -739,17 +748,17 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
              <div 
               className="rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-bounce"
               style={{ 
-                backgroundColor: nextLevelData.color,
+                backgroundColor: getLevelData(nextRenderKey).color,
                 width: `${Math.min(nextLevelData.radius * 2, 70)}px`,
                 height: `${Math.min(nextLevelData.radius * 2, 70)}px`,
                 fontSize: `${Math.min(nextLevelData.radius * 1.2, 40)}px`,
                 overflow: 'hidden'
               }}
             >
-              {(imageCache.current[nextLevel] && gameState.customImages[nextLevel]) ? (
-                <img src={gameState.customImages[nextLevel] || undefined} alt="Next" className="w-full h-full object-cover" />
+              {(imageCache.current[nextRenderKey] && gameState.customImages[nextRenderKey]) ? (
+                <img src={gameState.customImages[nextRenderKey] || undefined} alt="Next" className="w-full h-full object-cover" />
               ) : (
-                nextLevelData.emoji
+                getLevelData(nextRenderKey).emoji
               )}
             </div>
             <div className="w-px h-64 bg-stone-400/20 mt-2" />
@@ -762,17 +771,17 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
                <div 
                 className="rounded-full flex items-center justify-center border border-white"
                 style={{ 
-                  backgroundColor: nextLevelData.color,
+                  backgroundColor: getLevelData(nextRenderKey).color,
                   width: `${Math.min(nextLevelData.radius * 2, 70)}px`,
                   height: `${Math.min(nextLevelData.radius * 2, 70)}px`,
                   fontSize: `${Math.min(nextLevelData.radius * 1.2, 40)}px`,
                   overflow: 'hidden'
                 }}
               >
-                {(imageCache.current[nextLevel] && gameState.customImages[nextLevel]) ? (
-                  <img src={gameState.customImages[nextLevel] || undefined} alt="Ghost" className="w-full h-full object-cover" />
+                {(imageCache.current[nextRenderKey] && gameState.customImages[nextRenderKey]) ? (
+                  <img src={gameState.customImages[nextRenderKey] || undefined} alt="Ghost" className="w-full h-full object-cover" />
                 ) : (
-                  nextLevelData.emoji
+                  getLevelData(nextRenderKey).emoji
                 )}
               </div>
             </div>
