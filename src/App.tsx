@@ -133,6 +133,28 @@ export default function App() {
     });
   }, []);
 
+  const [loadedDefaultIcons, setLoadedDefaultIcons] = React.useState<Record<number, boolean>>({});
+
+  React.useEffect(() => {
+    EVOLUTION_LEVELS.forEach(lvl => {
+      const img = new Image();
+      // Using relative path for APK/WebView compatibility
+      img.src = `icons/icon${lvl.level}.png`;
+      img.onload = () => setLoadedDefaultIcons(prev => ({...prev, [lvl.level]: true}));
+      img.onerror = () => setLoadedDefaultIcons(prev => ({...prev, [lvl.level]: false}));
+    });
+  }, []);
+
+  const effectiveImages = React.useMemo(() => {
+    const combined: Record<number, string> = { ...gameState.customImages };
+    EVOLUTION_LEVELS.forEach(lvl => {
+      if (!combined[lvl.level] && loadedDefaultIcons[lvl.level]) {
+        combined[lvl.level] = `icons/icon${lvl.level}.png`;
+      }
+    });
+    return combined;
+  }, [gameState.customImages, loadedDefaultIcons]);
+
   const difficultyLevels: { id: Difficulty; label: string; desc: string; color: string }[] = [
     { id: 'easy', label: 'Hàn Vi', desc: 'Cơ bản (Cấp 1-2)', color: 'text-green-500' },
     { id: 'medium', label: 'Thăng Tiến', desc: 'Tiêu chuẩn (Cấp 1-3)', color: 'text-amber-500' },
@@ -141,7 +163,7 @@ export default function App() {
   ];
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden relative transition-colors duration-1000 ${
+    <div className={`min-h-[100dvh] flex flex-col items-center justify-center p-4 overflow-hidden relative transition-colors duration-1000 ${
       gameState.weather === 'snow' ? 'bg-[#0f172a]' : gameState.weather === 'windy' ? 'bg-[#1e293b]' : 'bg-[#1a0f0a]'
     }`}>
       {/* Background Ambience */}
@@ -150,7 +172,7 @@ export default function App() {
       <BallCustomizer 
         isOpen={isCustomizing}
         onClose={() => setIsCustomizing(false)}
-        customImages={gameState.customImages}
+        customImages={effectiveImages}
         onUpdateImage={handleUpdateCustomImage}
       />
       
@@ -174,7 +196,7 @@ export default function App() {
 
            <EvolutionChart 
               highestLevel={gameState.highestLevelReached} 
-              customImages={gameState.customImages}
+              customImages={effectiveImages}
             />
         </div>
 
@@ -241,7 +263,7 @@ export default function App() {
 
             <GameCanvas 
               ref={gameRef}
-              gameState={gameState}
+              gameState={{...gameState, customImages: effectiveImages}}
               onStateUpdate={handleStateUpdate}
             />
 
@@ -367,8 +389,8 @@ export default function App() {
                    >
                      {gameState.holdLevel ? (
                        <div className="w-full h-full flex items-center justify-center text-3xl transform group-hover:scale-110 transition-transform">
-                         {(gameState.holdLevel && gameState.customImages[gameState.holdLevel]) ? (
-                           <img src={gameState.customImages[gameState.holdLevel] || undefined} className="w-full h-full object-cover" />
+                         {(gameState.holdLevel && effectiveImages[gameState.holdLevel]) ? (
+                           <img src={effectiveImages[gameState.holdLevel] || undefined} className="w-full h-full object-cover" />
                          ) : (
                            EVOLUTION_LEVELS[gameState.holdLevel - 1].emoji
                          )}
