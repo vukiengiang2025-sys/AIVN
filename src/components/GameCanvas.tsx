@@ -114,7 +114,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
 
     // 2. Spawn 5 Small Hearts flying up
     const newHearts = Array.from({ length: 5 }).map((_, i) => ({
-      id: timestamp + i,
+      id: Math.random(),
       x: x + (Math.random() - 0.5) * 20,
       y: y + (Math.random() - 0.5) * 20
     }));
@@ -122,7 +122,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
 
     // 3. Twinkling Sparkles Effect (Subtle Fireworks)
     const newSparkles = Array.from({ length: 8 }).map((_, i) => ({
-      id: timestamp + 20 + i,
+      id: Math.random(),
       x,
       y,
       tx: (Math.random() - 0.5) * 80,
@@ -135,7 +135,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
     const colors = ['#4ade80', '#fbbf24', '#f472b6', '#60a5fa', '#FFD700'];
     const levelIdx = Math.min(texts.length - 1, Math.floor(level / 3));
     
-    const popupId = timestamp + 100;
+    const popupId = Math.random();
     const displayText = combo > 1 ? `${texts[levelIdx]} x${combo}` : texts[levelIdx];
 
     setPopups(prev => [...prev, { 
@@ -223,29 +223,98 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
         const bodyB = pair.bodyB as any;
 
         if (bodyA.isMerging || bodyB.isMerging) return;
+        if (!bodyA.level || !bodyB.level) return;
 
-        if (bodyA.level && bodyB.level && bodyA.level === bodyB.level) {
+        let newX = (bodyA.position.x + bodyB.position.x) / 2;
+        let newY = (bodyA.position.y + bodyB.position.y) / 2;
+
+        // BOMB LOGIC (17)
+        if (bodyA.level === 17 || bodyB.level === 17) {
+          bodyA.isMerging = true; bodyB.isMerging = true;
+          const bomb = bodyA.level === 17 ? bodyA : bodyB;
+          
+          spawnEffects(bomb.position.x, bomb.position.y, 100, 15, 0);
+          setFlashes(prev => [...prev, { id: Math.random(), x: bomb.position.x, y: bomb.position.y, radius: 150 }]);
+          triggerShake();
+          
+          Matter.World.remove(engine.world, [bomb]);
+          const worldBodies = Matter.Composite.allBodies(engine.world);
+          worldBodies.forEach(b => {
+             const d = Matter.Vector.magnitude(Matter.Vector.sub(b.position, bomb.position));
+             if (d < 120 && !(b as any).isStatic) {
+                Matter.World.remove(engine.world, b);
+             } else if (d < 250 && !(b as any).isStatic) {
+                const forceDir = Matter.Vector.normalise(Matter.Vector.sub(b.position, bomb.position));
+                Matter.Body.applyForce(b, b.position, Matter.Vector.mult(forceDir, 0.15));
+             }
+          });
+          onStateUpdate({ happinessPoints: stateRef.current.happinessPoints + 50 });
+          return;
+        }
+
+        // BLACK HOLE LOGIC (18)
+        if (bodyA.level === 18 || bodyB.level === 18) {
+          bodyA.isMerging = true; bodyB.isMerging = true;
+          const hole = bodyA.level === 18 ? bodyA : bodyB;
+          
+          Matter.World.remove(engine.world, [hole]);
+          const worldBodies = Matter.Composite.allBodies(engine.world);
+          worldBodies.forEach(b => {
+             const d = Matter.Vector.magnitude(Matter.Vector.sub(b.position, hole.position));
+             if (d < 100 && !(b as any).isStatic) {
+                Matter.World.remove(engine.world, b);
+             }
+          });
+          setFlashes(prev => [...prev, { id: Math.random(), x: hole.position.x, y: hole.position.y, radius: 100 }]);
+          onStateUpdate({ happinessPoints: stateRef.current.happinessPoints + 20 });
+          return;
+        }
+
+        // WILDCARD AND NORMAL MERGES
+        let isMerge = false;
+        let mergeNextLevel = -1;
+
+        if (bodyA.level === 16 && bodyB.level <= 15) {
+           isMerge = true; mergeNextLevel = bodyB.level + 1;
+        } else if (bodyB.level === 16 && bodyA.level <= 15) {
+           isMerge = true; mergeNextLevel = bodyA.level + 1;
+        } else if (bodyA.level === 16 && bodyB.level === 16) {
+           isMerge = true; mergeNextLevel = 2; // Two wildcards = level 2
+        } else if (bodyA.level === bodyB.level && bodyA.level < 15) {
+           isMerge = true; mergeNextLevel = bodyA.level + 1;
+        } else if (bodyA.level === bodyB.level && bodyA.level === 15) {
+           bodyA.isMerging = true; bodyB.isMerging = true;
+           Matter.World.remove(engine.world, [bodyA, bodyB]);
+           triggerShake();
+           spawnEffects(newX, newY, 80, 15, 0);
+           const pointsGained = 32768; // Level 15 points
+           onStateUpdate({ 
+             happinessPoints: stateRef.current.happinessPoints + pointsGained,
+             highScore: Math.max(stateRef.current.highScore, stateRef.current.happinessPoints + pointsGained)
+           });
+           return;
+        }
+
+        if (isMerge) {
           // Mark both as merging
           bodyA.isMerging = true;
           bodyB.isMerging = true;
 
-          const newX = (bodyA.position.x + bodyB.position.x) / 2;
-          const newY = (bodyA.position.y + bodyB.position.y) / 2;
-          
-          if (bodyA.level < 15) {
-            const nextLevelData = EVOLUTION_LEVELS.find(l => l.level === bodyA.level + 1);
+          if (mergeNextLevel <= 15) {
+            const nextLevelData = getLevelData(mergeNextLevel);
             if (nextLevelData) {
               const newBody = createCircle(newX, newY, nextLevelData.level);
               Matter.World.remove(engine.world, [bodyA, bodyB]);
               Matter.World.add(engine.world, newBody);
               
-              // Unlocked 'Bậc Thầy Gộp' adds a shockwave
-              if (stateRef.current.talents.includes('Bậc Thầy Gộp')) {
+              // Always add shockwave for big merges (Idea 4 improvement)
+              if (nextLevelData.level >= 5) {
                  const worldBodies = Matter.Composite.allBodies(engine.world);
                  worldBodies.forEach(b => {
                    const d = Matter.Vector.magnitude(Matter.Vector.sub(b.position, {x: newX, y: newY}));
                    if (d < 150 && b !== newBody && !(b as any).isStatic) {
                       const forceDir = Matter.Vector.normalise(Matter.Vector.sub(b.position, {x: newX, y: newY}));
+                      // Soft body bump simulation
                       const forceMagnitude = 0.05 * (1 - d/150);
                       Matter.Body.applyForce(b, b.position, Matter.Vector.mult(forceDir, forceMagnitude));
                    }
@@ -277,23 +346,6 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
                 comboCount: newComboCount
               });
             }
-          } else if (bodyA.level === 15) {
-            // Level 15 + Level 15 = Only these two vanish!
-            Matter.World.remove(engine.world, [bodyA, bodyB]);
-            triggerShake();
-            spawnEffects(newX, newY, 80, 15);
-            
-            // Celebration fireworks at collision point
-            confetti({
-              particleCount: 150,
-              spread: 70,
-              origin: { x: newX / GAME_WIDTH, y: newY / GAME_HEIGHT },
-              colors: ['#FFD700', '#FF4500', '#FF69B4', '#00FF00', '#00BFFF']
-            });
-
-            onStateUpdate({ 
-              happinessPoints: stateRef.current.happinessPoints + 100000 
-            });
           }
         }
       });
@@ -309,7 +361,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
         const level = (body as any).level;
         if (!level || (body as any).isMerging) return;
 
-        const levelData = EVOLUTION_LEVELS[level - 1];
+        const levelData = getLevelData(level);
         const { x, y } = body.position;
         const angle = body.angle;
 
@@ -336,7 +388,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
         context.fill();
 
         // 3D Polish: Aura for High Level (Level >= 8)
-        if (level >= 8) {
+        if (level >= 8 && level <= 15) {
           context.beginPath();
           context.arc(0, 0, levelData.radius * 1.1, 0, Math.PI * 2);
           const auraGrad = context.createRadialGradient(0, 0, levelData.radius, 0, 0, levelData.radius * 1.15);
@@ -348,7 +400,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
 
         // Draw Imperial Golden Border
         context.lineWidth = levelData.radius < 8 ? 0.5 : 2;
-        context.strokeStyle = '#D4AF37'; // Gold
+        context.strokeStyle = level > 15 ? '#ff00ff' : '#D4AF37'; // Gold or Purple for special
         context.stroke();
 
         // Inner ring
@@ -359,7 +411,8 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
         context.stroke();
 
         // Draw Emoji or Custom Image
-        const customImg = imageCache.current[level];
+        const renderKey = (body as any).renderImageKey || level;
+        const customImg = imageCache.current[renderKey];
         if (customImg) {
           context.beginPath();
           context.arc(0, 0, levelData.radius * 0.9, 0, Math.PI * 2);
@@ -484,19 +537,34 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
     }
   }));
 
+  const getLevelData = (level: number) => {
+    if (level === 16) return { level: 16, radius: 25, color: '#facc15', emoji: '🌟', lore: 'Thiên thạch vạn năng' };
+    if (level === 17) return { level: 17, radius: 20, color: '#ef4444', emoji: '💣', lore: 'Bóng bơm nổ tung' };
+    if (level === 18) return { level: 18, radius: 25, color: '#a855f7', emoji: '🌌', lore: 'Lỗ đen sâu thẳm' };
+    return EVOLUTION_LEVELS[Math.min(level - 1, EVOLUTION_LEVELS.length - 1)];
+  };
+
   const createCircle = (x: number, y: number, level: number) => {
-    const levelData = EVOLUTION_LEVELS[level - 1];
+    const levelData = getLevelData(level);
     const settings = getDifficultySettings();
     const friction = gameState.weather === 'snow' ? 0.8 : settings.friction;
 
     const body = Matter.Bodies.circle(x, y, levelData.radius, {
-      restitution: 0.2, // Lower bounciness
+      restitution: 0.4, // Higher bounciness (Idea #4)
       friction: friction, // Dynamic friction
       frictionAir: 0.01,
       density: 0.001 * level,
       render: { visible: false } 
     });
     (body as any).level = level;
+    
+    // Assign a random render image (1-15) for normal balls for surprise factor! (30% chance)
+    if (level <= 15 && Math.random() < 0.3) {
+      (body as any).renderImageKey = Math.floor(Math.random() * 15) + 1;
+    } else {
+      (body as any).renderImageKey = level;
+    }
+    
     (body as any).createdAt = Date.now();
     (body as any).isMerging = false;
     return body;
@@ -557,12 +625,17 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
     }
     
     setTimeout(() => {
-      setNextLevel(Math.floor(Math.random() * settings.maxDropLevel) + 1);
+      let randNext = Math.floor(Math.random() * settings.maxDropLevel) + 1;
+      const powerRoll = Math.random();
+      if (powerRoll < 0.02) randNext = 16; // 2% Wildcard
+      else if (powerRoll < 0.04) randNext = 17; // 2% Bomb 
+      else if (powerRoll < 0.06) randNext = 18; // 2% Black Hole
+      setNextLevel(randNext);
       setDropping(false);
     }, 600);
   };
 
-  const nextLevelData = EVOLUTION_LEVELS[nextLevel - 1];
+  const nextLevelData = getLevelData(nextLevel);
 
   return (
     <div 
@@ -667,9 +740,9 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
               className="rounded-full flex items-center justify-center border-2 border-white shadow-lg animate-bounce"
               style={{ 
                 backgroundColor: nextLevelData.color,
-                width: `${Math.min(nextLevelData.radius * 2, 60)}px`,
-                height: `${Math.min(nextLevelData.radius * 2, 60)}px`,
-                fontSize: `${Math.min(nextLevelData.radius, 30)}px`,
+                width: `${Math.min(nextLevelData.radius * 2, 70)}px`,
+                height: `${Math.min(nextLevelData.radius * 2, 70)}px`,
+                fontSize: `${Math.min(nextLevelData.radius * 1.2, 40)}px`,
                 overflow: 'hidden'
               }}
             >
@@ -690,9 +763,9 @@ const GameCanvas = forwardRef<GameCanvasHandle, {
                 className="rounded-full flex items-center justify-center border border-white"
                 style={{ 
                   backgroundColor: nextLevelData.color,
-                  width: `${Math.min(nextLevelData.radius * 2, 60)}px`,
-                  height: `${Math.min(nextLevelData.radius * 2, 60)}px`,
-                  fontSize: `${Math.min(nextLevelData.radius, 30)}px`,
+                  width: `${Math.min(nextLevelData.radius * 2, 70)}px`,
+                  height: `${Math.min(nextLevelData.radius * 2, 70)}px`,
+                  fontSize: `${Math.min(nextLevelData.radius * 1.2, 40)}px`,
                   overflow: 'hidden'
                 }}
               >

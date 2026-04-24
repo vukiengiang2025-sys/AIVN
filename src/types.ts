@@ -20,7 +20,6 @@ export interface GameState {
   isZenMode: boolean; // No game over mode
   weather: 'clear' | 'windy' | 'storm' | 'snow';
   // Advanced Ecosystem Features
-  talents: string[]; // Unlocked passive buffs
   harvestMode: boolean; // Double coins for a period
   sagaProgress: number; // Percent of total milestones completed
 }

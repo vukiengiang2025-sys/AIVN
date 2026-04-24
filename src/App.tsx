@@ -41,7 +41,6 @@ export default function App() {
       currentTitle: 'Dân Thường',
       isZenMode: false,
       weather: 'clear',
-      talents: [],
       harvestMode: false,
       sagaProgress: 0
     };
@@ -109,21 +108,13 @@ export default function App() {
       // Update Title & Currency if points increased
       if (newState.happinessPoints && newState.happinessPoints > prev.happinessPoints) {
         const diff = newState.happinessPoints - prev.happinessPoints;
-        const multiplier = prev.talents.includes('Đại Phú Gia') ? 1.5 : 1;
+        const multiplier = 1;
         updated.currency = Math.floor(prev.currency + (diff * multiplier));
         updated.currentTitle = updateTitle(updated.happinessPoints);
 
         // Update Saga Progress based on titles
         const titleIndex = TITLES.findIndex(t => t.title === updated.currentTitle);
         updated.sagaProgress = Math.floor(((titleIndex + 1) / TITLES.length) * 100);
-
-        // Unlock Passive Talents based on milestones
-        if (updated.highestLevelReached >= 10 && !prev.talents.includes('Đại Phú Gia')) {
-           updated.talents = [...prev.talents, 'Đại Phú Gia']; // +50% Coin Gain
-        }
-        if (updated.happinessPoints >= 100000 && !prev.talents.includes('Bậc Thầy Gộp')) {
-           updated.talents = [...prev.talents, 'Bậc Thầy Gộp']; // Unlocks more rewards
-        }
       }
 
       if (typeof window !== 'undefined' && updated.highScore > prev.highScore) {
@@ -136,22 +127,22 @@ export default function App() {
   const [loadedDefaultIcons, setLoadedDefaultIcons] = React.useState<Record<number, boolean>>({});
 
   React.useEffect(() => {
-    EVOLUTION_LEVELS.forEach(lvl => {
+    for (let i = 1; i <= 18; i++) {
       const img = new Image();
       // Using relative path for APK/WebView compatibility
-      img.src = `icons/icon${lvl.level}.png`;
-      img.onload = () => setLoadedDefaultIcons(prev => ({...prev, [lvl.level]: true}));
-      img.onerror = () => setLoadedDefaultIcons(prev => ({...prev, [lvl.level]: false}));
-    });
+      img.src = `./icons/icon${i}.png`;
+      img.onload = () => setLoadedDefaultIcons(prev => ({...prev, [i]: true}));
+      img.onerror = () => setLoadedDefaultIcons(prev => ({...prev, [i]: false}));
+    }
   }, []);
 
   const effectiveImages = React.useMemo(() => {
     const combined: Record<number, string> = { ...gameState.customImages };
-    EVOLUTION_LEVELS.forEach(lvl => {
-      if (!combined[lvl.level] && loadedDefaultIcons[lvl.level]) {
-        combined[lvl.level] = `icons/icon${lvl.level}.png`;
+    for (let i = 1; i <= 18; i++) {
+      if (!combined[i] && loadedDefaultIcons[i]) {
+        combined[i] = `./icons/icon${i}.png`;
       }
-    });
+    }
     return combined;
   }, [gameState.customImages, loadedDefaultIcons]);
 
@@ -468,29 +459,6 @@ export default function App() {
           </div>
 
           {/* Passive Talents Section */}
-          <div className="bg-stone-900/80 p-5 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md">
-             <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-[0.3em] mb-3 border-b border-amber-900/20 pb-2">Thiên Phú</div>
-             <div className="flex flex-col gap-2">
-                <div className={`flex items-center gap-2 p-2 rounded-2xl border-2 transition-all ${gameState.talents.includes('Đại Phú Gia') ? 'bg-amber-900/40 border-amber-500' : 'bg-black/20 border-stone-800 opacity-40'}`}>
-                   <div className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center shadow-lg shrink-0">
-                      <Zap className="w-4 h-4 text-white" />
-                   </div>
-                   <div className="flex flex-col">
-                      <span className="text-[9px] font-black text-amber-200 uppercase">ĐẠI PHÚ GIA</span>
-                      <p className="text-[7px] text-stone-400 leading-tight">+50% Xu</p>
-                   </div>
-                </div>
-                <div className={`flex items-center gap-2 p-2 rounded-2xl border-2 transition-all ${gameState.talents.includes('Bậc Thầy Gộp') ? 'bg-amber-900/40 border-amber-500' : 'bg-black/20 border-stone-800 opacity-40'}`}>
-                   <div className="w-8 h-8 rounded-full bg-stone-700 flex items-center justify-center shadow-lg shrink-0">
-                      <Zap className="w-4 h-4 text-amber-400" />
-                   </div>
-                   <div className="flex flex-col">
-                      <span className="text-[9px] font-black text-amber-200 uppercase">BẬC THẦY GỘP</span>
-                      <p className="text-[7px] text-stone-400 leading-tight">Sóng xung kích</p>
-                   </div>
-                </div>
-             </div>
-          </div>
           
           <div className="bg-stone-900/80 p-5 rounded-[2rem] border-2 border-amber-900/30 shadow-2xl backdrop-blur-md flex-1">
              <div className="text-[10px] font-black text-amber-600/60 uppercase tracking-[0.3em] mb-4 border-b border-amber-900/20 pb-2">Nhiệm Vụ Dòng Tộc</div>
